@@ -1,8 +1,5 @@
-import builtins
 import random
-import copy
 import base64
-from threading import Timer
 from tkinter import *
 
 
@@ -107,6 +104,8 @@ class LifeCanvas(Canvas):
         self.update_field()
 
     def on_click(self, event):
+        if event.widget != self:
+            return
         x, y = event.x, event.y
         j, i = x // self.cell_size, y // self.cell_size
         if i >= self.field_size or j >= self.field_size:
@@ -142,8 +141,8 @@ class LifeCanvas(Canvas):
 
         self.field = None
         self.reset()
-        self.bind("<Button-1>", self.on_click)
-        tk.bind("<space>", self.on_space)
+        self.tk.bind("<Button-1>", self.on_click)
+        self.tk.bind("<space>", self.on_space)
         self.update_field()
 
 
