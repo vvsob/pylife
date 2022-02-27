@@ -5,17 +5,14 @@ import base64
 from threading import Timer
 from tkinter import *
 
-cell_size = 20
-field_size = 20
 
-
-def make_empty_field():
+def make_empty_field(field_size):
     return [[False] * field_size for _ in range(field_size)]
 
 
-def make_random_field():
+def make_random_field(field_size):
     k = random.random()
-    res = make_empty_field()
+    res = make_empty_field(field_size)
     for i in range(field_size):
         for j in range(field_size):
             if 5 <= i <= 14 and 5 <= j <= 14:
@@ -33,7 +30,7 @@ def field_to_str(field):
     return b64.decode()
 
 
-def str_to_field(b64):
+def str_to_field(b64, field_size):
     def make_bits(n):
         return [((n >> i) & 1) == 1 for i in range(8)]
 
@@ -42,15 +39,11 @@ def str_to_field(b64):
     for x in b:
         pool += make_bits(x)
     pool.reverse()
-    res = make_empty_field()
+    res = make_empty_field(field_size)
     for i in range(field_size):
         for j in range(field_size):
             res[i][j] = pool.pop()
     return res
-
-
-fld = str_to_field('AAAAAAAAAAAAAMADAAINEAABARAAAAEAEAAAAQAQEAABAhggAAEMCgBHAAAAAAAAAAA=')
-print(field_to_str(fld) == 'AAAAAAAAAAAAAMADAAINEAABARAAAAEAEAAAAQAQEAABAhggAAEMCgBHAAAAAAAAAAA=')
 
 
 class Event:
@@ -77,18 +70,18 @@ class LifeCanvas(Canvas):
     def reset(self, field_method=None):
         if not field_method:
             field_method = self.field_method
-        self.field = field_method()
+        self.field = field_method(self.field_size)
         self.update_field()
 
     def tick(self):
-        new_field = make_empty_field()
+        new_field = make_empty_field(self.field_size)
         for i, row in enumerate(self.field):
             for j, elem in enumerate(row):
                 neighbours = 0
                 for di in range(-1, 2):
                     for dj in range(-1, 2):
-                        if (not (0 <= i + di < field_size)) or \
-                                (not (0 <= j + dj < field_size)) or \
+                        if (not (0 <= i + di < self.field_size)) or \
+                                (not (0 <= j + dj < self.field_size)) or \
                                 (di, dj) == (0, 0):
                             continue
                         neighbours += self.field[i + di][j + dj]
@@ -103,8 +96,8 @@ class LifeCanvas(Canvas):
         self.delete("all")
         for i, row in enumerate(self.field):
             for j, elem in enumerate(row):
-                rect = self.create_rectangle(j * cell_size, i * cell_size,
-                                             (j + 1) * cell_size, (i + 1) * cell_size,
+                rect = self.create_rectangle(j * self.cell_size, i * self.cell_size,
+                                             (j + 1) * self.cell_size, (i + 1) * self.cell_size,
                                              fill=('green' if elem else 'black'),
                                              outline='#101010')
         self.after_update()
@@ -115,8 +108,8 @@ class LifeCanvas(Canvas):
 
     def on_click(self, event):
         x, y = event.x, event.y
-        j, i = x // cell_size, y // cell_size
-        if i >= field_size or j >= field_size:
+        j, i = x // self.cell_size, y // self.cell_size
+        if i >= self.field_size or j >= self.field_size:
             return
         self.field[i][j] = not self.field[i][j]
         self.update_field()
@@ -133,11 +126,20 @@ class LifeCanvas(Canvas):
         return res
 
     def load(self, b64):
-        self.field = str_to_field(b64)
+        self.field = str_to_field(b64, self.field_size)
 
-    def __init__(self, tk, root, *args, field_method=make_empty_field, **kwargs):
+    def __init__(self, tk, root, *args, field_size=20, cell_size=20, field_method=make_empty_field,
+                 **kwargs):
         super().__init__(root, *args, **kwargs)
+        self.tk = tk
+        self.root = root
         self.field_method = field_method
+        self.field_size = field_size
+        self.cell_size = cell_size
+
+        self['width'] = cell_size * field_size
+        self['height'] = cell_size * field_size
+
         self.field = None
         self.reset()
         self.bind("<Button-1>", self.on_click)
@@ -242,13 +244,13 @@ class Generator(Frame):
             self.root.update()
             self.root.update_idletasks()
         print(best_config[1])
-        self.canvas.field = str_to_field(best_config[1])
+        self.canvas.field = str_to_field(best_config[1], self.canvas.field_size)
         self.root.update()
         self.root.update_idletasks()
         self.canvas.update_field()
         self.info_label['text'] = "Generation offline"
 
-    def __init__(self, tk, root, canvas, controls, *args, max_count=50_000, **kwargs):
+    def __init__(self, tk, root, canvas, controls, *args, max_count=500, **kwargs):
         super().__init__(root, *args, **kwargs)
         self.root = root
         self.canvas = canvas
@@ -269,9 +271,7 @@ def main():
     left_frame = Frame(root)
 
     canvas = LifeCanvas(root, left_frame,
-                        field_method=make_random_field,
-                        width=cell_size * field_size,
-                        height=cell_size * field_size)
+                        field_method=make_random_field)
     canvas.pack()
 
     control_frame = ControlButtons(left_frame, canvas)
