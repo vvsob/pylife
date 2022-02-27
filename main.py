@@ -203,6 +203,14 @@ class FieldLoader(Frame):
         self.canvas.update_field()
         self.controls.pause()
 
+    def save(self):
+        self.b64_entry.delete(1.0, END)
+        self.b64_entry.insert(END, field_to_str(self.canvas.field))
+
+    def copy(self):
+        self.clipboard_clear()
+        self.clipboard_append(self.b64_entry.get('1.0', END))
+
     def __init__(self, root, canvas, controls, *args, **kwargs):
         super().__init__(root, *args, **kwargs)
         self.canvas = canvas
@@ -211,8 +219,17 @@ class FieldLoader(Frame):
         self.b64_label.pack()
         self.b64_entry = Text(self)
         self.b64_entry.pack()
-        self.b64_load = Button(self, text='Load', command=self.load)
-        self.b64_load.pack()
+
+        self.buttons_frame = Frame(self)
+
+        self.b64_load = Button(self.buttons_frame, text='Load', command=self.load)
+        self.b64_load.pack(side='left')
+        self.b64_save = Button(self.buttons_frame, text='Save', command=self.save)
+        self.b64_save.pack(side='left')
+        self.b64_copy = Button(self.buttons_frame, text='Copy', command=self.copy)
+        self.b64_copy.pack(side='left')
+
+        self.buttons_frame.pack()
 
 
 class InfoLabel(Label):
@@ -265,7 +282,7 @@ class Generator(Frame):
 
 def main():
     root = Tk()
-    root.geometry("500x500+300+300")
+    root.geometry("700x500+300+300")
 
     left_frame = Frame(root)
 
