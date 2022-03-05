@@ -1,6 +1,8 @@
 import random
 import base64
+import tkinter.ttk
 from tkinter import *
+from tkinter.ttk import Notebook
 
 
 def make_empty_field(field_size):
@@ -8,7 +10,7 @@ def make_empty_field(field_size):
 
 
 def make_random_field(field_size):
-    k = random.random()
+    k = random.uniform(0.2, 0.8)
     res = make_empty_field(field_size)
     for i in range(field_size):
         for j in range(field_size):
@@ -96,7 +98,7 @@ class LifeCanvas(Canvas):
                 rect = self.create_rectangle(j * self.cell_size, i * self.cell_size,
                                              (j + 1) * self.cell_size, (i + 1) * self.cell_size,
                                              fill=('green' if elem else 'black'),
-                                             outline='#101010')
+                                             outline='#101010', width=1 if self.borders else 0)
         self.after_update()
 
     def on_space(self, event):
@@ -127,11 +129,16 @@ class LifeCanvas(Canvas):
     def load(self, b64):
         self.field = str_to_field(b64, self.field_size)
 
-    def __init__(self, tk, root, *args, field_size=20, cell_size=20, field_method=make_empty_field,
+    def __init__(self, window, root,
+                 controllable=True, borders=True,
+                 field_size=20, cell_size=20,
+                 field_method=make_empty_field,
                  **kwargs):
-        super().__init__(root, *args, **kwargs)
-        self.tk = tk
+        super().__init__(root, **kwargs)
+        self.window = window
         self.root = root
+        self.controllable = controllable
+        self.borders = borders
         self.field_method = field_method
         self.field_size = field_size
         self.cell_size = cell_size
@@ -141,8 +148,9 @@ class LifeCanvas(Canvas):
 
         self.field = None
         self.reset()
-        self.tk.bind("<Button-1>", self.on_click)
-        self.tk.bind("<space>", self.on_space)
+        if self.controllable:
+            self.window.bind("<Button-1>", self.on_click)
+            self.window.bind("<space>", self.on_space)
         self.update_field()
 
 
@@ -175,8 +183,8 @@ class ControlButtons(Frame):
             self.canvas.update_field()
             self.after(1000, self.__tick)
 
-    def __init__(self, root, canvas, *args, **kwargs):
-        super().__init__(root, *args, **kwargs)
+    def __init__(self, root, canvas, **kwargs):
+        super().__init__(root, **kwargs)
         self.canvas = canvas
 
         self.timer_running = False
@@ -211,8 +219,8 @@ class FieldLoader(Frame):
         self.clipboard_clear()
         self.clipboard_append(self.b64_entry.get('1.0', END))
 
-    def __init__(self, root, canvas, controls, *args, **kwargs):
-        super().__init__(root, *args, **kwargs)
+    def __init__(self, root, canvas, controls, **kwargs):
+        super().__init__(root, **kwargs)
         self.canvas = canvas
         self.controls = controls
         self.b64_label = Label(self, text='Enter b64 string:')
@@ -236,8 +244,8 @@ class InfoLabel(Label):
     def update_info(self):
         self['text'] = str(self.canvas.count())
 
-    def __init__(self, root, canvas, *args, **kwargs):
-        super().__init__(root, *args, **kwargs)
+    def __init__(self, root, canvas, **kwargs):
+        super().__init__(root, **kwargs)
         self.canvas = canvas
         self.update_info()
         canvas.after_update.add(self.update_info)
@@ -248,7 +256,6 @@ class Generator(Frame):
         self.controls.pause()
         best_config = (0, None)
         for i in range(self.max_count):
-            self.info_label['text'] = f"Progress: {i + 1}/{self.max_count}"
             self.canvas.reset()
             config = field_to_str(self.canvas.field)
             self.canvas.tick()
@@ -256,18 +263,18 @@ class Generator(Frame):
             if cnt > best_config[0]:
                 best_config = (cnt, config)
                 print(cnt)
-            self.canvas.update_field()
-            self.root.update()
-            self.root.update_idletasks()
+            if i % 10 == 0:
+                self.info_label['text'] = f"Progress: {i}/{self.max_count}"
+                self.canvas.update_field()
+                self.root.update()
+                self.root.update_idletasks()
         print(best_config[1])
         self.canvas.field = str_to_field(best_config[1], self.canvas.field_size)
-        self.root.update()
-        self.root.update_idletasks()
         self.canvas.update_field()
         self.info_label['text'] = "Generation offline"
 
-    def __init__(self, tk, root, canvas, controls, *args, max_count=500, **kwargs):
-        super().__init__(root, *args, **kwargs)
+    def __init__(self, tk, root, canvas, controls, max_count=3_000_000, **kwargs):
+        super().__init__(root, **kwargs)
         self.root = root
         self.canvas = canvas
         self.controls = controls
@@ -295,13 +302,19 @@ def main():
 
     info_label = InfoLabel(left_frame, canvas)
     info_label.pack()
-
-    generator = Generator(root, left_frame, canvas, control_frame)
-    generator.pack()
-
     left_frame.pack(side='left')
 
-    right_frame = FieldLoader(root, canvas, control_frame)
+    right_frame = Frame(root)
+    tabs = Notebook(right_frame)
+
+    b64_tab = FieldLoader(tabs, canvas, control_frame)
+
+    tabs.add(b64_tab, text='Import/Export')
+
+    generator = Generator(root, tabs, canvas, control_frame)
+    tabs.add(generator, text='Generator')
+
+    tabs.pack(expand=1, fill="both")
     right_frame.pack(side='left')
 
     root.mainloop()
