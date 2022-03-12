@@ -9,12 +9,18 @@ def make_empty_field(field_size):
     return [[False] * field_size for _ in range(field_size)]
 
 
-def make_random_field(field_size):
+def make_random_field(field_size, gen_size_x, gen_size_y):
+    field_mid = field_size // 2
+    gen_mid_x = gen_size_x // 2
+    gen_add_x = gen_size_x % 2
+    gen_mid_y = gen_size_y // 2
+    gen_add_y = gen_size_y % 2
     k = random.uniform(0.2, 0.8)
     res = make_empty_field(field_size)
     for i in range(field_size):
         for j in range(field_size):
-            if 5 <= i <= 14 and 5 <= j <= 14:
+            if field_mid - gen_mid_x <= i < field_mid + gen_mid_y + gen_add_x and \
+                    field_mid - gen_mid_y <= j < field_mid + gen_mid_y + gen_add_y:
                 res[i][j] = random.random() <= k
     return res
 
@@ -251,20 +257,60 @@ class InfoLabel(Label):
         canvas.after_update.add(self.update_info)
 
 
+class GeneratorSettings(Frame):
+    def get_attempts(self):
+        return int(self.attempts_entry.get())
+
+    def get_iterations(self):
+        return int(self.iterations_entry.get())
+
+    def get_size(self):
+        return tuple(
+            map(int, [self.generated_size_entry_x.get(), self.generated_size_entry_y.get()]))
+
+    def __init__(self, root, **kwargs):
+        super().__init__(root, **kwargs)
+        self.root = root
+
+        self.attempts_label = Label(self, text="Number of attempts:")
+        self.attempts_entry = Spinbox(self, width=20, from_=1000, to=10_000_000, increment=1000)
+
+        self.attempts_label.grid(row=0, column=0)
+        self.attempts_entry.grid(row=0, column=1, columnspan=3)
+
+        self.iterations_label = Label(self, text="Number of iterations:")
+        self.iterations_entry = Spinbox(self, width=20, from_=1, to=50, increment=1)
+
+        self.iterations_label.grid(row=1, column=0)
+        self.iterations_entry.grid(row=1, column=1, columnspan=3)
+
+        self.generated_size_label_x = Label(self, text="Generated configuration width:")
+        self.generated_size_entry_x = Spinbox(self, width=5, from_=3, to=30, increment=1)
+        self.generated_size_label_y = Label(self, text="height:")
+        self.generated_size_entry_y = Spinbox(self, width=5, from_=3, to=30, increment=1)
+
+        self.generated_size_label_x.grid(row=2, column=0)
+        self.generated_size_entry_x.grid(row=2, column=1)
+        self.generated_size_label_y.grid(row=2, column=2)
+        self.generated_size_entry_y.grid(row=2, column=3)
+
+
 class Generator(Frame):
     def start(self):
         self.controls.pause()
         best_config = (0, None)
-        for i in range(self.max_count):
-            self.canvas.reset()
+        for i in range(self.settings.get_attempts()):
+            self.canvas.reset(
+                field_method=lambda size: make_random_field(size, *self.settings.get_size()))
             config = field_to_str(self.canvas.field)
-            self.canvas.tick()
+            for tick in range(self.settings.get_iterations()):
+                self.canvas.tick()
             cnt = self.canvas.count()['alive']
             if cnt > best_config[0]:
                 best_config = (cnt, config)
-                print(cnt)
+                print(cnt, config)
             if i % 10 == 0:
-                self.info_label['text'] = f"Progress: {i}/{self.max_count}"
+                self.info_label['text'] = f"Progress: {i}/{self.settings.get_attempts()}"
                 self.canvas.update_field()
                 self.root.update()
                 self.root.update_idletasks()
@@ -273,28 +319,31 @@ class Generator(Frame):
         self.canvas.update_field()
         self.info_label['text'] = "Generation offline"
 
-    def __init__(self, tk, root, canvas, controls, max_count=3_000_000, **kwargs):
+    def __init__(self, tk, root, canvas, controls, **kwargs):
         super().__init__(root, **kwargs)
         self.root = root
         self.canvas = canvas
         self.controls = controls
-        self.max_count = max_count
+
+        self.settings = GeneratorSettings(self)
+        self.settings.pack()
 
         self.info_label = Label(self, text='Generation offline')
-        self.info_label.pack(side='left')
+        self.info_label.pack()
 
         self.start_button = Button(self, text='Start generating', command=self.start)
-        self.start_button.pack(side='left')
+        self.start_button.pack()
 
 
 def main():
     root = Tk()
-    root.geometry("700x500+300+300")
+    root.geometry("800x500+300+300")
 
     left_frame = Frame(root)
 
     canvas = LifeCanvas(root, left_frame,
-                        field_method=make_random_field)
+                        field_method=make_empty_field,
+                        field_size=40, cell_size=10)
     canvas.pack()
 
     control_frame = ControlButtons(left_frame, canvas)
