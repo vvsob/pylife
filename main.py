@@ -1,8 +1,9 @@
 import random
 import base64
+import copy
 import tkinter.ttk
 from tkinter import *
-from tkinter.ttk import Notebook
+from tkinter.ttk import Notebook, Combobox
 
 
 def make_empty_field(field_size):
@@ -22,6 +23,22 @@ def make_random_field(field_size, gen_size_x, gen_size_y):
             if field_mid - gen_mid_x <= i < field_mid + gen_mid_y + gen_add_x and \
                     field_mid - gen_mid_y <= j < field_mid + gen_mid_y + gen_add_y:
                 res[i][j] = random.random() <= k
+    return res
+
+
+def mutate(field_size, gen_size_x, gen_size_y, initial_config):
+    field_mid = field_size // 2
+    gen_mid_x = gen_size_x // 2
+    gen_add_x = gen_size_x % 2
+    gen_mid_y = gen_size_y // 2
+    gen_add_y = gen_size_y % 2
+    k = random.uniform(0.01, 0.1)
+    res = make_empty_field(field_size)
+    for i in range(field_size):
+        for j in range(field_size):
+            if field_mid - gen_mid_x <= i < field_mid + gen_mid_y + gen_add_x and \
+                    field_mid - gen_mid_y <= j < field_mid + gen_mid_y + gen_add_y:
+                res[i][j] = (initial_config[i][j]) != (random.random() <= k)
     return res
 
 
@@ -275,52 +292,68 @@ class GeneratorSettings(Frame):
         self.attempts_label = Label(self, text="Number of attempts:")
         self.attempts_entry = Spinbox(self, width=20, from_=1000, to=10_000_000, increment=1000)
 
-        self.attempts_label.grid(row=0, column=0)
-        self.attempts_entry.grid(row=0, column=1, columnspan=3)
+        self.attempts_label.grid(row=1, column=0)
+        self.attempts_entry.grid(row=1, column=1, columnspan=3)
 
         self.iterations_label = Label(self, text="Number of iterations:")
         self.iterations_entry = Spinbox(self, width=20, from_=1, to=50, increment=1)
 
-        self.iterations_label.grid(row=1, column=0)
-        self.iterations_entry.grid(row=1, column=1, columnspan=3)
+        self.iterations_label.grid(row=2, column=0)
+        self.iterations_entry.grid(row=2, column=1, columnspan=3)
 
         self.generated_size_label_x = Label(self, text="Generated configuration width:")
         self.generated_size_entry_x = Spinbox(self, width=5, from_=3, to=30, increment=1)
         self.generated_size_label_y = Label(self, text="height:")
         self.generated_size_entry_y = Spinbox(self, width=5, from_=3, to=30, increment=1)
 
-        self.generated_size_label_x.grid(row=2, column=0)
-        self.generated_size_entry_x.grid(row=2, column=1)
-        self.generated_size_label_y.grid(row=2, column=2)
-        self.generated_size_entry_y.grid(row=2, column=3)
+        self.generated_size_label_x.grid(row=3, column=0)
+        self.generated_size_entry_x.grid(row=3, column=1)
+        self.generated_size_label_y.grid(row=3, column=2)
+        self.generated_size_entry_y.grid(row=3, column=3)
 
 
 class Generator(Frame):
     def start(self):
         self.controls.pause()
         best_config = (0, None)
+        self.running = True
+        self.start_button['state'] = DISABLED
+        self.stop_button['state'] = NORMAL
         for i in range(self.settings.get_attempts()):
+            if not self.running:
+                break
+
             self.canvas.reset(
                 field_method=lambda size: make_random_field(size, *self.settings.get_size()))
             config = field_to_str(self.canvas.field)
+
             for tick in range(self.settings.get_iterations()):
                 self.canvas.tick()
             cnt = self.canvas.count()['alive']
+
             if cnt > best_config[0]:
                 best_config = (cnt, config)
                 print(cnt, config)
+
             if i % 10 == 0:
                 self.info_label['text'] = f"Progress: {i}/{self.settings.get_attempts()}"
                 self.canvas.update_field()
                 self.root.update()
                 self.root.update_idletasks()
+
         print(best_config[1])
         self.canvas.field = str_to_field(best_config[1], self.canvas.field_size)
         self.canvas.update_field()
         self.info_label['text'] = "Generation offline"
 
+    def stop(self):
+        self.running = False
+        self.start_button['state'] = NORMAL
+        self.stop_button['state'] = DISABLED
+
     def __init__(self, tk, root, canvas, controls, **kwargs):
         super().__init__(root, **kwargs)
+        self.running = False
         self.root = root
         self.canvas = canvas
         self.controls = controls
@@ -333,6 +366,68 @@ class Generator(Frame):
 
         self.start_button = Button(self, text='Start generating', command=self.start)
         self.start_button.pack()
+        self.stop_button = Button(self, text='Stop generating', command=self.stop, state=DISABLED)
+        self.stop_button.pack()
+
+
+class MutatorGenerator(Frame):
+    def start(self):
+        init_config = copy.deepcopy(self.canvas.field)
+        self.controls.pause()
+        best_config = (0, None)
+        self.running = True
+        self.start_button['state'] = DISABLED
+        self.stop_button['state'] = NORMAL
+        for i in range(self.settings.get_attempts()):
+            if not self.running:
+                break
+
+            self.canvas.reset(
+                field_method=lambda size:
+                mutate(size, *self.settings.get_size(), initial_config=init_config))
+            config = field_to_str(self.canvas.field)
+
+            for tick in range(self.settings.get_iterations()):
+                self.canvas.tick()
+            cnt = self.canvas.count()['alive']
+
+            if cnt > best_config[0]:
+                best_config = (cnt, config)
+                print(cnt, config)
+
+            if i % 10 == 0:
+                self.info_label['text'] = f"Progress: {i}/{self.settings.get_attempts()}"
+                self.canvas.update_field()
+                self.root.update()
+                self.root.update_idletasks()
+
+        print(best_config[1])
+        self.canvas.field = str_to_field(best_config[1], self.canvas.field_size)
+        self.canvas.update_field()
+        self.info_label['text'] = "Generation offline"
+
+    def stop(self):
+        self.running = False
+        self.start_button['state'] = NORMAL
+        self.stop_button['state'] = DISABLED
+
+    def __init__(self, tk, root, canvas, controls, **kwargs):
+        super().__init__(root, **kwargs)
+        self.running = False
+        self.root = root
+        self.canvas = canvas
+        self.controls = controls
+
+        self.settings = GeneratorSettings(self)
+        self.settings.pack()
+
+        self.info_label = Label(self, text='Generation offline')
+        self.info_label.pack()
+
+        self.start_button = Button(self, text='Start generating', command=self.start)
+        self.start_button.pack()
+        self.stop_button = Button(self, text='Stop generating', command=self.stop, state=DISABLED)
+        self.stop_button.pack()
 
 
 def main():
@@ -362,6 +457,9 @@ def main():
 
     generator = Generator(root, tabs, canvas, control_frame)
     tabs.add(generator, text='Generator')
+
+    mutator_generator = MutatorGenerator(root, tabs, canvas, control_frame)
+    tabs.add(mutator_generator, text='Mutator Generator')
 
     tabs.pack(expand=1, fill="both")
     right_frame.pack(side='left')
